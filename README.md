@@ -1,7 +1,7 @@
 # 🎵 MISIA Mood Recommender
 
 今の気分に寄り添う MISIA の楽曲を推薦する Streamlit Web アプリです。  
-OpenAI API を利用して、入力された気分を分析し 1〜3 曲をカード形式で提案します。
+Anthropic API (Claude) を利用して、入力された気分を分析し 1〜3 曲をカード形式で提案します。
 
 ---
 
@@ -18,7 +18,7 @@ cd my-app
 **uv を使う場合（推奨）**
 
 ```bash
-uv add streamlit openai python-dotenv
+uv add streamlit anthropic python-dotenv
 ```
 
 **pip を使う場合**
@@ -37,13 +37,13 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-2. `.env` を開き、`OPENAI_API_KEY` に取得したキーを貼り付けます。
+2. `.env` を開き、`ANTHROPIC_API_KEY` に取得したキーを貼り付けます。
 
 ```dotenv
-OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
-> API キーは [OpenAI Platform](https://platform.openai.com/api-keys) で取得できます。
+> API キーは [Anthropic Console](https://console.anthropic.com/settings/keys) で取得できます。
 
 ---
 
@@ -81,4 +81,4 @@ my-app/
 ## 注意事項
 
 - `.env` ファイルは Git にコミットしないでください（`.gitignore` に追加推奨）
-- 使用モデルは `gpt-4o-mini`（低コスト・高速）です。変更する場合は `app.py` の `model=` を編集してください
+- 使用モデルは `claude-haiku-4-5`（低コスト・高速）です。変更する場合は `app.py` の `model=` を編集してください
