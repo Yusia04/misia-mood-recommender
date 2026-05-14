@@ -29,19 +29,14 @@ pip install -r requirements.txt
 
 ---
 
-## API キー設定方法
+## API Key の設定方法
 
-1. `.env.example` をコピーして `.env` を作成します。
+このアプリは **アプリ画面のサイドバー** から Anthropic API Key を入力する方式です。  
+`.env` ファイルや Streamlit Secrets の設定は不要です。
 
-```bash
-cp .env.example .env
-```
-
-2. `.env` を開き、`ANTHROPIC_API_KEY` に取得したキーを貼り付けます。
-
-```dotenv
-ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-```
+1. アプリを起動する
+2. 画面左のサイドバーに Anthropic API Key を入力する
+3. 入力されたキーはブラウザのセッション中のみ使用され、保存されません
 
 > API キーは [Anthropic Console](https://console.anthropic.com/settings/keys) で取得できます。
 
@@ -59,10 +54,11 @@ streamlit run app.py
 
 ## 使い方
 
-1. 画面下部の入力欄に「今の気分」を日本語で入力します  
+1. 画面左のサイドバーに Anthropic API Key を入力します
+2. 画面下部の入力欄に「今の気分」を日本語で入力します  
    例：`疲れた`、`前向きになりたい`、`夜に浸りたい`
-2. Enter を押すと MISIA の楽曲を 1〜3 曲推薦します
-3. 会話履歴は画面上に残ります（ブラウザをリロードするとリセットされます）
+3. Enter を押すと MISIA の楽曲を 1〜3 曲推薦します
+4. 会話履歴は画面上に残ります（ブラウザをリロードするとリセットされます）
 
 ---
 
@@ -72,7 +68,7 @@ streamlit run app.py
 my-app/
 ├── app.py            # メインアプリ
 ├── requirements.txt  # 依存パッケージ一覧
-├── .env.example      # 環境変数サンプル
+├── .env.example      # 環境変数サンプル（参考用）
 └── README.md         # このファイル
 ```
 
@@ -80,5 +76,6 @@ my-app/
 
 ## 注意事項
 
+- API Key はサイドバーへの入力のみで使用し、保存・ログ出力は一切行いません
 - `.env` ファイルは Git にコミットしないでください（`.gitignore` に追加推奨）
 - 使用モデルは `claude-haiku-4-5`（低コスト・高速）です。変更する場合は `app.py` の `model=` を編集してください

@@ -3,13 +3,8 @@ MISIA Mood Recommender
 今の気分に合った MISIA の楽曲を推薦する Streamlit アプリ
 """
 
-import os
 import streamlit as st
 import anthropic
-from dotenv import load_dotenv
-
-# .env ファイルから環境変数を読み込む
-load_dotenv()
 
 # ─────────────────────────────────────────
 # ページ設定（必ず最初に呼び出す）
@@ -18,7 +13,7 @@ st.set_page_config(
     page_title="MISIA Mood Recommender",
     page_icon="🎵",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
 # ─────────────────────────────────────────
@@ -186,6 +181,21 @@ st.markdown(
 )
 
 # ─────────────────────────────────────────
+# サイドバー: API Key 設定
+# ─────────────────────────────────────────
+st.sidebar.header("API Key 設定")
+st.sidebar.markdown(
+    "このアプリは Anthropic API を使って楽曲推薦文を生成します。  \n"
+    "利用するには、ご自身の Anthropic API Key を入力してください。  \n"
+    "入力されたキーは保存されません。"
+)
+api_key = st.sidebar.text_input(
+    "Anthropic API Key",
+    type="password",
+    placeholder="sk-ant-...",
+)
+
+# ─────────────────────────────────────────
 # タイトルエリア
 # ─────────────────────────────────────────
 st.markdown(
@@ -197,27 +207,6 @@ st.markdown(
 """,
     unsafe_allow_html=True,
 )
-
-# ─────────────────────────────────────────
-# Anthropic API キーの確認
-# ─────────────────────────────────────────
-api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-
-if not api_key:
-    st.markdown(
-        """
-<div class="error-box">
-⚠️ <strong>ANTHROPIC_API_KEY を設定してください。</strong><br>
-<code>.env</code> ファイルに <code>ANTHROPIC_API_KEY=sk-ant-...</code> を記載するか、
-環境変数として設定してください。
-</div>
-""",
-        unsafe_allow_html=True,
-    )
-    st.stop()
-
-# Anthropic クライアントを初期化
-client = anthropic.Anthropic(api_key=api_key)
 
 # ─────────────────────────────────────────
 # 会話履歴を session_state で管理
@@ -254,84 +243,58 @@ SONG_DATABASE = [
      "description": "エネルギッシュで温かい歌声が前向きな気持ちを引き出してくれる代表曲。"},
     {"title": "ラストダンスは私に", "mood": ["大人", "夜", "ジャズ", "静か", "切ない"],
      "description": "夜に静かに感情へ浸りたい時に合う、大人っぽくムーディな楽曲。"},
-        {"title": "THE GLORY DAY", "mood": ["祝福", "感動", "希望", "壮大", "前向き"],
+    {"title": "THE GLORY DAY", "mood": ["祝福", "感動", "希望", "壮大", "前向き"],
      "description": "スケール感のあるサウンドが、特別な瞬間や前向きな気持ちをさらに高めてくれる曲。"},
-
     {"title": "INTO THE LIGHT", "mood": ["ダンス", "高揚感", "元気", "クラブ", "楽しい"],
      "description": "気分を一気に切り替えたい時や、テンションを上げたい時にぴったりのダンスナンバー。"},
-
     {"title": "Escape", "mood": ["解放", "夜", "気分転換", "かっこいい", "都会"],
      "description": "閉塞感から抜け出したい時に、クールな空気感で背中を押してくれる楽曲。"},
-
     {"title": "BACK BLOCKS", "mood": ["自信", "力強い", "クール", "夜", "都会"],
      "description": "自分らしく前へ進みたい時に合う、都会的で力強い雰囲気の曲。"},
-
     {"title": "LAILA", "mood": ["情熱", "大人", "夜", "異国感", "高揚感"],
      "description": "情熱的でミステリアスな雰囲気に浸りたい夜に合う一曲。"},
-
     {"title": "Sea of Dreams", "mood": ["夢", "癒し", "希望", "穏やか", "優しい"],
      "description": "心をふっと軽くしてくれるような、夢と希望に満ちた優しい楽曲。"},
-
     {"title": "飛び方を忘れた小さな鳥", "mood": ["不安", "孤独", "再出発", "優しい", "励まし"],
      "description": "自信をなくした時に、優しく寄り添いながら前を向かせてくれる曲。"},
-
     {"title": "名前のない空を見上げて", "mood": ["静か", "祈り", "空", "切ない", "希望"],
      "description": "静かな時間の中で、自分の気持ちと向き合いたい時に合うバラード。"},
-
     {"title": "冬のエトランジェ", "mood": ["冬", "寂しい", "恋愛", "静か", "切ない"],
      "description": "冬の夜のような透明感と寂しさを感じさせる、大人っぽい楽曲。"},
-
     {"title": "太陽の地図", "mood": ["旅", "希望", "前向き", "明るい", "元気"],
      "description": "新しい場所へ踏み出したい時に、明るく背中を押してくれる曲。"},
-
     {"title": "星のように...", "mood": ["夜", "優しい", "祈り", "切ない", "温かい"],
      "description": "大切な人を想いながら、静かな夜に聴きたくなる優しいバラード。"},
-
     {"title": "幸せをフォーエバー", "mood": ["幸せ", "愛", "祝福", "結婚", "温かい"],
      "description": "幸せな気持ちや大切な人への愛情を感じたい時にぴったりの楽曲。"},
-
     {"title": "白い季節", "mood": ["冬", "恋愛", "静か", "透明感", "切ない"],
      "description": "冬の澄んだ空気のような切なさと美しさを感じられる曲。"},
-
     {"title": "あなたにスマイル:)", "mood": ["笑顔", "元気", "前向き", "明るい", "応援"],
      "description": "落ち込んだ気分を少し軽くして、自然と笑顔になれるポジティブな曲。"},
-
     {"title": "SUPER RAINBOW", "mood": ["楽しい", "カラフル", "高揚感", "元気", "前向き"],
      "description": "明るいエネルギーに満ちていて、楽しい気分をさらに盛り上げてくれる曲。"},
-
     {"title": "君のそばにいるよ", "mood": ["寄り添い", "安心", "優しい", "温かい", "癒し"],
      "description": "ひとりで抱え込んでしまった時に、そっと寄り添ってくれるような楽曲。"},
-
     {"title": "僕はペガサス 君はポラリス", "mood": ["絆", "壮大", "希望", "物語", "力強い"],
      "description": "ドラマチックな世界観の中で、強い絆や希望を感じられる一曲。"},
-
     {"title": "恋は終わらないずっと", "mood": ["恋愛", "一途", "温かい", "切ない", "想い"],
      "description": "変わらない想いを大切にしたい時に、優しく寄り添ってくれるラブソング。"},
-
     {"title": "DEEPNESS", "mood": ["深い", "夜", "祈り", "悲しみ", "壮大"],
      "description": "深い感情や孤独感に静かに寄り添う、重厚感のあるバラード。"},
-
     {"title": "MAWARE MAWARE", "mood": ["祝祭", "元気", "ダンス", "高揚感", "楽しい"],
      "description": "開放感があり、楽しく盛り上がりたい時にぴったりのエネルギッシュな曲。"},
-
     {"title": "CATCH THE RAINBOW", "mood": ["未来", "希望", "前向き", "元気", "明るい"],
      "description": "未来へ向かって明るく進みたい時に、前向きな気持ちをくれる曲。"},
-
     {"title": "銀河", "mood": ["宇宙", "幻想的", "静か", "夜", "壮大"],
      "description": "広い宇宙を漂うような感覚で、静かに感情へ浸れる幻想的な楽曲。"},
-
     {"title": "Royal Chocolate Flush", "mood": ["大人", "クール", "都会", "自信", "ダンス"],
      "description": "都会的でスタイリッシュな雰囲気があり、自信を高めたい時に合う曲。"},
-
     {"title": "ANY LOVE", "mood": ["愛", "優しい", "安心", "温かい", "恋愛"],
      "description": "穏やかな愛情に包まれたい時に、優しく心へ染み込む楽曲。"},
-
     {"title": "そばにいて...", "mood": ["寂しい", "会いたい", "恋愛", "夜", "切ない"],
      "description": "誰かにそばにいてほしい夜の寂しさへ、静かに寄り添ってくれる曲。"},
-
     {"title": "約束の翼", "mood": ["旅立ち", "希望", "応援", "壮大", "前向き"],
      "description": "新しい一歩を踏み出す時に、力強く背中を押してくれる楽曲。"},
-
     {"title": "少しずつ 大切に", "mood": ["日常", "穏やか", "優しい", "安心", "癒し"],
      "description": "焦らずゆっくり進みたい時に、穏やかな気持ちになれる曲。"},
 ]
@@ -489,70 +452,78 @@ for entry in st.session_state.history:
     st.markdown(entry["html"], unsafe_allow_html=True)
 
 # ─────────────────────────────────────────
-# チャット入力
+# API Key 未入力時の案内 / 入力済みの場合は推薦処理
 # ─────────────────────────────────────────
-mood_input = st.chat_input(
-    "今の気分を教えてください（例：疲れた、前向きになりたい、夜に浸りたい）"
-)
+if not api_key:
+    st.info("左のサイドバーに Anthropic API Key を入力すると、楽曲推薦を開始できます。")
+else:
+    client = anthropic.Anthropic(api_key=api_key)
 
-# ─────────────────────────────────────────
-# 入力があったら推薦処理を実行
-# ─────────────────────────────────────────
-if mood_input:
-    mood_input = mood_input.strip()
-    if not mood_input:
-        st.warning("気分を入力してください。")
-    else:
-        with st.spinner("🎵 MISIA の楽曲を探しています…"):
-            try:
-                # Step1: 気分 → 感情ラベルに分類
-                r1 = client.messages.create(
-                    model="claude-haiku-4-5-20251001",
-                    max_tokens=200,
-                    system=CLASSIFY_SYSTEM,
-                    messages=[{"role": "user", "content": f"今の気分: {mood_input}"}],
-                )
-                emotion, labels = parse_classify(r1.content[0].text or "")
+    # ─────────────────────────────────────────
+    # チャット入力
+    # ─────────────────────────────────────────
+    mood_input = st.chat_input(
+        "今の気分を教えてください（例：疲れた、前向きになりたい、夜に浸りたい）"
+    )
 
-                # Step2: ラベルで候補曲を絞り込み → 推薦文を生成
-                candidates = select_candidates(labels)
-                r2 = client.messages.create(
-                    model="claude-haiku-4-5-20251001",
-                    max_tokens=800,
-                    system=RECOMMEND_SYSTEM,
-                    messages=[{"role": "user", "content": build_recommend_prompt(mood_input, candidates)}],
-                )
-                parsed = parse_recommend(r2.content[0].text or "", emotion)
+    # ─────────────────────────────────────────
+    # 入力があったら推薦処理を実行
+    # ─────────────────────────────────────────
+    if mood_input:
+        mood_input = mood_input.strip()
+        if not mood_input:
+            st.warning("気分を入力してください。")
+        else:
+            with st.spinner("🎵 MISIA の楽曲を探しています…"):
+                try:
+                    # Step1: 気分 → 感情ラベルに分類
+                    r1 = client.messages.create(
+                        model="claude-haiku-4-5-20251001",
+                        max_tokens=200,
+                        system=CLASSIFY_SYSTEM,
+                        messages=[{"role": "user", "content": f"今の気分: {mood_input}"}],
+                    )
+                    emotion, labels = parse_classify(r1.content[0].text or "")
 
-                # バリデーション後に曲が残らない場合のフォールバック
-                if not parsed["songs"]:
-                    parsed["songs"] = [
-                        {"title": c["title"], "reason": c["description"]} for c in candidates
-                    ]
-                    parsed["message"] = "あなたの気分に合う曲を選びました。"
+                    # Step2: ラベルで候補曲を絞り込み → 推薦文を生成
+                    candidates = select_candidates(labels)
+                    r2 = client.messages.create(
+                        model="claude-haiku-4-5-20251001",
+                        max_tokens=800,
+                        system=RECOMMEND_SYSTEM,
+                        messages=[{"role": "user", "content": build_recommend_prompt(mood_input, candidates)}],
+                    )
+                    parsed = parse_recommend(r2.content[0].text or "", emotion)
 
-                # HTML に変換して履歴に追加
-                html = render_recommendation(mood_input, parsed)
-                st.session_state.history.append({"mood": mood_input, "html": html})
+                    # バリデーション後に曲が残らない場合のフォールバック
+                    if not parsed["songs"]:
+                        parsed["songs"] = [
+                            {"title": c["title"], "reason": c["description"]} for c in candidates
+                        ]
+                        parsed["message"] = "あなたの気分に合う曲を選びました。"
 
-                # 画面に表示
-                st.markdown(html, unsafe_allow_html=True)
+                    # HTML に変換して履歴に追加
+                    html = render_recommendation(mood_input, parsed)
+                    st.session_state.history.append({"mood": mood_input, "html": html})
 
-            except anthropic.AuthenticationError:
-                st.markdown(
-                    '<div class="error-box">🔑 API キーが無効です。正しい ANTHROPIC_API_KEY を設定してください。</div>',
-                    unsafe_allow_html=True,
-                )
-            except anthropic.APIError as e:
-                st.markdown(
-                    f'<div class="error-box">⚠️ API エラーが発生しました：{e}</div>',
-                    unsafe_allow_html=True,
-                )
-            except Exception as e:
-                st.markdown(
-                    f'<div class="error-box">❌ 予期しないエラーが発生しました：{e}</div>',
-                    unsafe_allow_html=True,
-                )
+                    # 画面に表示
+                    st.markdown(html, unsafe_allow_html=True)
+
+                except anthropic.AuthenticationError:
+                    st.markdown(
+                        '<div class="error-box">🔑 API キーが無効です。正しい Anthropic API Key をサイドバーに入力してください。</div>',
+                        unsafe_allow_html=True,
+                    )
+                except anthropic.APIError as e:
+                    st.markdown(
+                        f'<div class="error-box">⚠️ API エラーが発生しました：{e}</div>',
+                        unsafe_allow_html=True,
+                    )
+                except Exception as e:
+                    st.markdown(
+                        f'<div class="error-box">❌ 予期しないエラーが発生しました：{e}</div>',
+                        unsafe_allow_html=True,
+                    )
 
 # ─────────────────────────────────────────
 # フッター
