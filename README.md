@@ -1,81 +1,63 @@
-# 🎵 MISIA Mood Recommender
+# MISIA Mood Recommender
 
-今の気分に寄り添う MISIA の楽曲を推薦する Streamlit Web アプリです。  
-Anthropic API (Claude) を利用して、入力された気分を分析し 1〜3 曲をカード形式で提案します。
+今の気分に寄り添う MISIA の楽曲を推薦する Streamlit Web アプリです。
+Anthropic API (Claude) を利用して、入力された気分を分析し、MISIA 公式全曲リスト由来の曲データベースから 1〜3 曲を提案します。
 
----
+## 主な機能
 
-## セットアップ方法
+- API キーなしでも動くデモモード
+- すぐ試せる入力例ボタン
+- 履歴クリアボタン
+- 公式全曲リスト由来の 408 曲データベース
+- 推薦カードから公式ページへ移動できるリンク
+- 感情ラベル候補を曲データベースから自動生成
+- 入力文と Claude 出力の HTML エスケープ
 
-### 1. リポジトリをクローン／ディレクトリへ移動
+## セットアップ
 
-```bash
-cd my-app
-```
-
-### 2. 依存パッケージをインストール
-
-**uv を使う場合（推奨）**
-
-```bash
-uv add streamlit anthropic python-dotenv
-```
-
-**pip を使う場合**
+Python 3.9 以上が必要です。
 
 ```bash
+cd misia-mood-recommender
+
+mkdir -p ~/.venvs
+python3.9 -m venv ~/.venvs/misia-mood-recommender
+source ~/.venvs/misia-mood-recommender/bin/activate
+
+python -m pip install --upgrade pip setuptools wheel
 pip install -r requirements.txt
 ```
 
----
-
-## API Key の設定方法
-
-このアプリは **アプリ画面のサイドバー** から Anthropic API Key を入力する方式です。  
-`.env` ファイルや Streamlit Secrets の設定は不要です。
-
-1. アプリを起動する
-2. 画面左のサイドバーに Anthropic API Key を入力する
-3. 入力されたキーはブラウザのセッション中のみ使用され、保存されません
-
-> API キーは [Anthropic Console](https://console.anthropic.com/settings/keys) で取得できます。
-
----
-
-## 起動方法
+## 起動
 
 ```bash
-streamlit run app.py
+cd misia-mood-recommender
+source ~/.venvs/misia-mood-recommender/bin/activate
+python -m streamlit run app.py
 ```
 
-ブラウザで `http://localhost:8501` が自動的に開きます。
-
----
+ブラウザで `http://localhost:8501` を開きます。
 
 ## 使い方
 
-1. 画面左のサイドバーに Anthropic API Key を入力します
-2. 画面下部の入力欄に「今の気分」を日本語で入力します  
-   例：`疲れた`、`前向きになりたい`、`夜に浸りたい`
-3. Enter を押すと MISIA の楽曲を 1〜3 曲推薦します
-4. 会話履歴は画面上に残ります（ブラウザをリロードするとリセットされます）
+Claude API を使う場合は、左サイドバーに Anthropic API Key を入力します。
+API キーなしで見せたい場合は、左サイドバーの「API を使わないデモモード」をオンにします。
 
----
+入力例:
+
+- `まじで萎えてる`
+- `研究発表前で緊張してる`
+- `今日は前向きに頑張りたい`
 
 ## ファイル構成
 
+```text
+misia-mood-recommender/
+├── app.py            # Streamlit UI と推薦処理
+├── song_database.py  # 曲名・感情ラベル・説明文・公式ページURL
+├── requirements.txt  # 依存パッケージ
+└── README.md
 ```
-my-app/
-├── app.py            # メインアプリ
-├── requirements.txt  # 依存パッケージ一覧
-├── .env.example      # 環境変数サンプル（参考用）
-└── README.md         # このファイル
-```
 
----
-
-## 注意事項
-
-- API Key はサイドバーへの入力のみで使用し、保存・ログ出力は一切行いません
-- `.env` ファイルは Git にコミットしないでください（`.gitignore` に追加推奨）
-- 使用モデルは `claude-haiku-4-5`（低コスト・高速）です。変更する場合は `app.py` の `model=` を編集してください
+曲データは MISIA 公式サイトの全曲リストをもとに作成しています。
+公式ページ: https://www.misia.jp/allsongs

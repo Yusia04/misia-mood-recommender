@@ -1,9 +1,9 @@
 [project]
-name = "my-app"
+name = "misia-mood-recommender"
 version = "0.1.0"
-description = "Add your description here"
+description = "Streamlit app that recommends MISIA songs for your mood."
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.9"
 dependencies = [
     "anthropic>=0.102.0",
     "python-dotenv>=1.0.0",

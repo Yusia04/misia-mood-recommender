@@ -3,8 +3,39 @@ MISIA Mood Recommender
 今の気分に合った MISIA の楽曲を推薦する Streamlit アプリ
 """
 
+from __future__ import annotations
+
+import html
+
 import streamlit as st
-import anthropic
+
+from song_database import SONG_DATABASE
+
+try:
+    import anthropic
+except ImportError:
+    anthropic = None
+
+
+class _MissingAnthropicAuthenticationError(Exception):
+    pass
+
+
+class _MissingAnthropicAPIError(Exception):
+    pass
+
+
+ANTHROPIC_AUTHENTICATION_ERROR = getattr(
+    anthropic, "AuthenticationError", _MissingAnthropicAuthenticationError
+)
+ANTHROPIC_API_ERROR = getattr(anthropic, "APIError", _MissingAnthropicAPIError)
+
+MODEL_NAME = "claude-haiku-4-5-20251001"
+EXAMPLE_MOODS = [
+    "まじで萎えてる",
+    "研究発表前で緊張してる",
+    "今日は前向きに頑張りたい",
+]
 
 # ─────────────────────────────────────────
 # ページ設定（必ず最初に呼び出す）
@@ -16,6 +47,10 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+if "history" not in st.session_state:
+    # history は {"mood": str, "html": str} のリスト
+    st.session_state.history = []
+
 # ─────────────────────────────────────────
 # カスタム CSS：ダークテーマ・音楽アプリ風
 # ─────────────────────────────────────────
@@ -24,8 +59,11 @@ st.markdown(
 <style>
 /* ===== 全体背景 ===== */
 .stApp {
-    background: linear-gradient(135deg, #0d0d1a 0%, #0f0c29 40%, #1a0a2e 70%, #0d1b2a 100%);
-    color: #e8e0f0;
+    background:
+        radial-gradient(circle at 18% 12%, rgba(125, 211, 252, 0.12), transparent 28%),
+        radial-gradient(circle at 82% 4%, rgba(248, 212, 117, 0.10), transparent 24%),
+        linear-gradient(135deg, #071014 0%, #111827 42%, #1c1a2e 72%, #0f172a 100%);
+    color: #edf2f7;
 }
 
 /* ===== メインコンテナの横幅を広めに ===== */
@@ -38,48 +76,65 @@ st.markdown(
 /* ===== タイトルエリア ===== */
 .title-area {
     text-align: center;
-    padding: 2.5rem 1rem 2rem;
-    background: linear-gradient(180deg, rgba(106, 17, 203, 0.15) 0%, transparent 100%);
-    border-bottom: 1px solid rgba(150, 100, 255, 0.2);
+    padding: 2.4rem 1rem 1.8rem;
+    background: linear-gradient(180deg, rgba(125, 211, 252, 0.10) 0%, transparent 100%);
+    border-bottom: 1px solid rgba(125, 211, 252, 0.18);
     margin-bottom: 2rem;
-    border-radius: 0 0 20px 20px;
+    border-radius: 0 0 8px 8px;
 }
 
 .app-title {
     font-size: 2.6rem;
     font-weight: 700;
-    background: linear-gradient(90deg, #a78bfa, #818cf8, #c084fc);
+    background: linear-gradient(90deg, #f8d475, #7dd3fc, #f0abfc);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
-    letter-spacing: 0.05em;
+    letter-spacing: 0;
     margin-bottom: 0.4rem;
 }
 
 .app-subtitle {
     font-size: 1.05rem;
-    color: #9ca3c8;
-    letter-spacing: 0.08em;
+    color: #b7c4d8;
+    letter-spacing: 0;
+}
+
+.status-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem;
+    justify-content: center;
+    margin-top: 1.1rem;
+}
+
+.status-pill {
+    background: rgba(15, 23, 42, 0.58);
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 999px;
+    color: #dbeafe;
+    font-size: 0.82rem;
+    padding: 0.32rem 0.82rem;
 }
 
 /* ===== 会話バブル ===== */
 .user-bubble {
-    background: linear-gradient(135deg, #2d1b6b, #1e1654);
-    border: 1px solid rgba(139, 92, 246, 0.4);
-    border-radius: 16px 16px 4px 16px;
+    background: linear-gradient(135deg, rgba(20, 83, 45, 0.45), rgba(15, 23, 42, 0.86));
+    border: 1px solid rgba(45, 212, 191, 0.35);
+    border-radius: 8px 8px 2px 8px;
     padding: 1rem 1.4rem;
     margin: 1rem 0 0.5rem auto;
     max-width: 75%;
-    color: #e0d7f7;
-    box-shadow: 0 4px 15px rgba(139, 92, 246, 0.15);
+    color: #e6fffb;
+    box-shadow: 0 4px 15px rgba(20, 184, 166, 0.12);
 }
 
 .user-label {
     font-size: 0.75rem;
-    color: #a78bfa;
+    color: #7dd3fc;
     margin-bottom: 0.3rem;
     font-weight: 600;
-    letter-spacing: 0.05em;
+    letter-spacing: 0;
 }
 
 /* ===== 推薦カードコンテナ ===== */
@@ -89,20 +144,20 @@ st.markdown(
 
 .emotion-tag {
     display: inline-block;
-    background: rgba(99, 102, 241, 0.2);
-    border: 1px solid rgba(99, 102, 241, 0.5);
-    border-radius: 20px;
+    background: rgba(248, 212, 117, 0.13);
+    border: 1px solid rgba(248, 212, 117, 0.38);
+    border-radius: 999px;
     padding: 0.3rem 1rem;
     font-size: 0.9rem;
-    color: #c4b5fd;
+    color: #fde68a;
     margin-bottom: 1.2rem;
 }
 
 /* ===== 楽曲カード ===== */
 .song-card {
-    background: linear-gradient(135deg, rgba(30, 20, 60, 0.8), rgba(20, 30, 60, 0.8));
-    border: 1px solid rgba(129, 140, 248, 0.3);
-    border-radius: 16px;
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.88), rgba(29, 78, 116, 0.40));
+    border: 1px solid rgba(125, 211, 252, 0.24);
+    border-radius: 8px;
     padding: 1.4rem 1.6rem;
     margin-bottom: 1rem;
     box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255,255,255,0.05);
@@ -110,28 +165,48 @@ st.markdown(
 }
 
 .song-card:hover {
-    border-color: rgba(167, 139, 250, 0.5);
+    border-color: rgba(248, 212, 117, 0.48);
 }
 
 .song-title {
     font-size: 1.3rem;
     font-weight: 700;
-    color: #e2d9f3;
+    color: #f8fafc;
     margin-bottom: 0.6rem;
 }
 
 .song-reason {
     font-size: 0.95rem;
-    color: #a5b4d4;
+    color: #c7d2fe;
     line-height: 1.65;
     margin-bottom: 0.8rem;
     padding-left: 0.5rem;
-    border-left: 2px solid rgba(139, 92, 246, 0.5);
+    border-left: 2px solid rgba(45, 212, 191, 0.55);
+}
+
+.song-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    color: #94a3b8;
+    font-size: 0.82rem;
+}
+
+.song-link {
+    color: #7dd3fc;
+    text-decoration: none;
+    border-bottom: 1px solid rgba(125, 211, 252, 0.45);
+}
+
+.song-link:hover {
+    color: #fde68a;
+    border-bottom-color: rgba(253, 230, 138, 0.65);
 }
 
 .closing-message {
     font-size: 0.92rem;
-    color: #c084fc;
+    color: #fde68a;
     font-style: italic;
     text-align: right;
     margin-top: 0.4rem;
@@ -140,28 +215,28 @@ st.markdown(
 /* ===== 区切り線 ===== */
 .divider {
     border: none;
-    border-top: 1px solid rgba(100, 80, 180, 0.2);
+    border-top: 1px solid rgba(148, 163, 184, 0.18);
     margin: 2rem 0;
 }
 
 /* ===== チャット入力欄のオーバーライド ===== */
 .stChatInput textarea {
-    background-color: rgba(20, 15, 45, 0.9) !important;
-    border: 1px solid rgba(139, 92, 246, 0.4) !important;
-    color: #e0d7f7 !important;
-    border-radius: 12px !important;
+    background-color: rgba(15, 23, 42, 0.95) !important;
+    border: 1px solid rgba(45, 212, 191, 0.35) !important;
+    color: #eff6ff !important;
+    border-radius: 8px !important;
 }
 
 /* ===== スピナー文字色 ===== */
 .stSpinner > div {
-    color: #a78bfa !important;
+    color: #7dd3fc !important;
 }
 
 /* ===== エラーメッセージ ===== */
 .error-box {
     background: rgba(220, 38, 38, 0.1);
     border: 1px solid rgba(220, 38, 38, 0.4);
-    border-radius: 10px;
+    border-radius: 8px;
     padding: 1rem 1.4rem;
     color: #fca5a5;
     margin: 1rem 0;
@@ -170,10 +245,24 @@ st.markdown(
 /* ===== フッター ===== */
 .footer {
     text-align: center;
-    color: rgba(150, 130, 200, 0.4);
+    color: rgba(203, 213, 225, 0.45);
     font-size: 0.78rem;
     margin-top: 3rem;
-    letter-spacing: 0.1em;
+    letter-spacing: 0;
+}
+
+@media (max-width: 640px) {
+    .app-title {
+        font-size: 2rem;
+    }
+
+    .user-bubble {
+        max-width: 100%;
+    }
+
+    .song-card {
+        padding: 1.1rem 1rem;
+    }
 }
 </style>
 """,
@@ -194,113 +283,60 @@ api_key = st.sidebar.text_input(
     type="password",
     placeholder="sk-ant-...",
 )
+demo_mode = st.sidebar.toggle(
+    "API を使わないデモモード",
+    value=False,
+    help="発表時に API キーや通信が使えない場合でも、ローカルの曲データだけで推薦を表示します。",
+)
+
+if anthropic is None:
+    demo_mode = True
+    st.sidebar.warning("anthropic パッケージが未導入のため、デモモードで動作します。")
+
+if st.sidebar.button("履歴をクリア", use_container_width=True):
+    st.session_state.history = []
+    st.rerun()
 
 # ─────────────────────────────────────────
 # タイトルエリア
 # ─────────────────────────────────────────
 st.markdown(
-    """
+    f"""
 <div class="title-area">
   <div class="app-title">🎵 MISIA Mood Recommender</div>
   <div class="app-subtitle">今の気分に寄り添う MISIA の楽曲をおすすめします</div>
+  <div class="status-strip">
+    <span class="status-pill">Claude API</span>
+    <span class="status-pill">{len(SONG_DATABASE)}曲の公式ベースDB</span>
+    <span class="status-pill">発表用デモ対応</span>
+  </div>
 </div>
 """,
     unsafe_allow_html=True,
 )
 
-# ─────────────────────────────────────────
-# 会話履歴を session_state で管理
-# ─────────────────────────────────────────
-if "history" not in st.session_state:
-    # history は {"mood": str, "html": str} のリスト
-    st.session_state.history = []
-
-# ─────────────────────────────────────────
-# MISIA 楽曲データベース（推薦はここからのみ）
-# ─────────────────────────────────────────
-SONG_DATABASE = [
-    {"title": "Everything", "mood": ["癒し", "恋愛", "安心", "切ない"],
-     "description": "包み込むようなバラードで、疲れた心や切ない気持ちに寄り添う曲。"},
-    {"title": "アイノカタチ feat. HIDE(GReeeeN)", "mood": ["愛", "感謝", "家族", "温かい"],
-     "description": "大切な人への感謝や愛情を感じたい時に合う曲。"},
-    {"title": "逢いたくていま", "mood": ["悲しい", "切ない", "喪失", "泣きたい"],
-     "description": "会いたい人を想う気持ちや深い切なさに寄り添うバラード。"},
-    {"title": "明日へ", "mood": ["希望", "前向き", "応援", "立ち直り"],
-     "description": "つらい状況から少しずつ前を向きたい時に背中を押してくれる曲。"},
-    {"title": "陽のあたる場所", "mood": ["元気", "前向き", "明るい", "希望"],
-     "description": "明るく前向きな気持ちになりたい時に合う曲。"},
-    {"title": "BELIEVE", "mood": ["勇気", "前向き", "自信", "力強い"],
-     "description": "自分を信じて進みたい時に合う力強い曲。"},
-    {"title": "眠れぬ夜は君のせい", "mood": ["恋愛", "切ない", "夜", "寂しい"],
-     "description": "夜に恋しさや寂しさを感じる時に合う曲。"},
-    {"title": "果てなく続くストーリー", "mood": ["壮大", "希望", "人生", "前向き"],
-     "description": "人生を前向きに捉えたい時に合う壮大なバラード。"},
-    {"title": "忘れない日々", "mood": ["思い出", "切ない", "恋愛", "静か"],
-     "description": "過去の大切な記憶に浸りたい時に合う曲。"},
-    {"title": "オルフェンズの涙", "mood": ["祈り", "悲しみ", "壮大", "深い"],
-     "description": "深い悲しみや祈りの気持ちに寄り添う重厚な曲。"},
-    {"title": "つつみ込むように...", "mood": ["元気", "ソウルフル", "前向き", "高揚感"],
-     "description": "エネルギッシュで温かい歌声が前向きな気持ちを引き出してくれる代表曲。"},
-    {"title": "ラストダンスは私に", "mood": ["大人", "夜", "ジャズ", "静か", "切ない"],
-     "description": "夜に静かに感情へ浸りたい時に合う、大人っぽくムーディな楽曲。"},
-    {"title": "THE GLORY DAY", "mood": ["祝福", "感動", "希望", "壮大", "前向き"],
-     "description": "スケール感のあるサウンドが、特別な瞬間や前向きな気持ちをさらに高めてくれる曲。"},
-    {"title": "INTO THE LIGHT", "mood": ["ダンス", "高揚感", "元気", "クラブ", "楽しい"],
-     "description": "気分を一気に切り替えたい時や、テンションを上げたい時にぴったりのダンスナンバー。"},
-    {"title": "Escape", "mood": ["解放", "夜", "気分転換", "かっこいい", "都会"],
-     "description": "閉塞感から抜け出したい時に、クールな空気感で背中を押してくれる楽曲。"},
-    {"title": "BACK BLOCKS", "mood": ["自信", "力強い", "クール", "夜", "都会"],
-     "description": "自分らしく前へ進みたい時に合う、都会的で力強い雰囲気の曲。"},
-    {"title": "LAILA", "mood": ["情熱", "大人", "夜", "異国感", "高揚感"],
-     "description": "情熱的でミステリアスな雰囲気に浸りたい夜に合う一曲。"},
-    {"title": "Sea of Dreams", "mood": ["夢", "癒し", "希望", "穏やか", "優しい"],
-     "description": "心をふっと軽くしてくれるような、夢と希望に満ちた優しい楽曲。"},
-    {"title": "飛び方を忘れた小さな鳥", "mood": ["不安", "孤独", "再出発", "優しい", "励まし"],
-     "description": "自信をなくした時に、優しく寄り添いながら前を向かせてくれる曲。"},
-    {"title": "名前のない空を見上げて", "mood": ["静か", "祈り", "空", "切ない", "希望"],
-     "description": "静かな時間の中で、自分の気持ちと向き合いたい時に合うバラード。"},
-    {"title": "冬のエトランジェ", "mood": ["冬", "寂しい", "恋愛", "静か", "切ない"],
-     "description": "冬の夜のような透明感と寂しさを感じさせる、大人っぽい楽曲。"},
-    {"title": "太陽の地図", "mood": ["旅", "希望", "前向き", "明るい", "元気"],
-     "description": "新しい場所へ踏み出したい時に、明るく背中を押してくれる曲。"},
-    {"title": "星のように...", "mood": ["夜", "優しい", "祈り", "切ない", "温かい"],
-     "description": "大切な人を想いながら、静かな夜に聴きたくなる優しいバラード。"},
-    {"title": "幸せをフォーエバー", "mood": ["幸せ", "愛", "祝福", "結婚", "温かい"],
-     "description": "幸せな気持ちや大切な人への愛情を感じたい時にぴったりの楽曲。"},
-    {"title": "白い季節", "mood": ["冬", "恋愛", "静か", "透明感", "切ない"],
-     "description": "冬の澄んだ空気のような切なさと美しさを感じられる曲。"},
-    {"title": "あなたにスマイル:)", "mood": ["笑顔", "元気", "前向き", "明るい", "応援"],
-     "description": "落ち込んだ気分を少し軽くして、自然と笑顔になれるポジティブな曲。"},
-    {"title": "SUPER RAINBOW", "mood": ["楽しい", "カラフル", "高揚感", "元気", "前向き"],
-     "description": "明るいエネルギーに満ちていて、楽しい気分をさらに盛り上げてくれる曲。"},
-    {"title": "君のそばにいるよ", "mood": ["寄り添い", "安心", "優しい", "温かい", "癒し"],
-     "description": "ひとりで抱え込んでしまった時に、そっと寄り添ってくれるような楽曲。"},
-    {"title": "僕はペガサス 君はポラリス", "mood": ["絆", "壮大", "希望", "物語", "力強い"],
-     "description": "ドラマチックな世界観の中で、強い絆や希望を感じられる一曲。"},
-    {"title": "恋は終わらないずっと", "mood": ["恋愛", "一途", "温かい", "切ない", "想い"],
-     "description": "変わらない想いを大切にしたい時に、優しく寄り添ってくれるラブソング。"},
-    {"title": "DEEPNESS", "mood": ["深い", "夜", "祈り", "悲しみ", "壮大"],
-     "description": "深い感情や孤独感に静かに寄り添う、重厚感のあるバラード。"},
-    {"title": "MAWARE MAWARE", "mood": ["祝祭", "元気", "ダンス", "高揚感", "楽しい"],
-     "description": "開放感があり、楽しく盛り上がりたい時にぴったりのエネルギッシュな曲。"},
-    {"title": "CATCH THE RAINBOW", "mood": ["未来", "希望", "前向き", "元気", "明るい"],
-     "description": "未来へ向かって明るく進みたい時に、前向きな気持ちをくれる曲。"},
-    {"title": "銀河", "mood": ["宇宙", "幻想的", "静か", "夜", "壮大"],
-     "description": "広い宇宙を漂うような感覚で、静かに感情へ浸れる幻想的な楽曲。"},
-    {"title": "Royal Chocolate Flush", "mood": ["大人", "クール", "都会", "自信", "ダンス"],
-     "description": "都会的でスタイリッシュな雰囲気があり、自信を高めたい時に合う曲。"},
-    {"title": "ANY LOVE", "mood": ["愛", "優しい", "安心", "温かい", "恋愛"],
-     "description": "穏やかな愛情に包まれたい時に、優しく心へ染み込む楽曲。"},
-    {"title": "そばにいて...", "mood": ["寂しい", "会いたい", "恋愛", "夜", "切ない"],
-     "description": "誰かにそばにいてほしい夜の寂しさへ、静かに寄り添ってくれる曲。"},
-    {"title": "約束の翼", "mood": ["旅立ち", "希望", "応援", "壮大", "前向き"],
-     "description": "新しい一歩を踏み出す時に、力強く背中を押してくれる楽曲。"},
-    {"title": "少しずつ 大切に", "mood": ["日常", "穏やか", "優しい", "安心", "癒し"],
-     "description": "焦らずゆっくり進みたい時に、穏やかな気持ちになれる曲。"},
-]
+st.caption("入力例")
+example_cols = st.columns(len(EXAMPLE_MOODS))
+example_mood = None
+for col, mood_text in zip(example_cols, EXAMPLE_MOODS):
+    if col.button(mood_text, use_container_width=True):
+        example_mood = mood_text
 
 # バリデーション用タイトル集合
 VALID_TITLES = {song["title"] for song in SONG_DATABASE}
+SONGS_BY_TITLE = {song["title"]: song for song in SONG_DATABASE}
+ALL_LABELS = sorted({label for song in SONG_DATABASE for label in song["mood"]})
+
+KEYWORD_LABELS = [
+    (["萎え", "しんど", "疲", "つかれ", "つら", "辛", "だる", "無理", "病み", "落ち込"], ["癒し", "安心", "優しい", "寄り添い", "立ち直り"]),
+    (["泣", "悲", "寂", "さみ", "会いたい", "失恋"], ["悲しい", "寂しい", "切ない", "泣きたい", "恋愛"]),
+    (["不安", "緊張", "怖", "プレッシャー", "発表"], ["不安", "応援", "勇気", "前向き", "励まし"]),
+    (["頑張", "がんば", "前向き", "やる気", "挑戦", "再開"], ["前向き", "希望", "応援", "元気", "力強い"]),
+    (["恋", "好き", "愛", "大切", "家族", "感謝"], ["愛", "恋愛", "感謝", "温かい", "安心"]),
+    (["夜", "眠れ", "静か", "浸り", "一人", "ひとり"], ["夜", "静か", "切ない", "寂しい", "大人"]),
+    (["楽しい", "最高", "テンション", "踊", "盛り上"], ["楽しい", "元気", "高揚感", "ダンス", "明るい"]),
+    (["冬", "寒", "透明"], ["冬", "静か", "透明感", "切ない"]),
+]
 
 
 def select_candidates(labels: list, top_n: int = 3) -> list:
@@ -316,18 +352,73 @@ def select_candidates(labels: list, top_n: int = 3) -> list:
     return candidates if candidates else SONG_DATABASE[:top_n]
 
 
+def local_classify(mood: str) -> tuple[str, list]:
+    """APIなしデモ用の簡易ラベル分類。"""
+    labels = []
+    for keywords, keyword_labels in KEYWORD_LABELS:
+        if any(keyword in mood for keyword in keywords):
+            labels.extend(keyword_labels)
+
+    if not labels:
+        labels = ["癒し", "希望", "前向き"]
+
+    labels = [label for label in dict.fromkeys(labels) if label in ALL_LABELS]
+
+    if any(word in mood for word in ["萎え", "しんど", "疲", "つかれ", "つら", "辛", "だる"]):
+        emotion = "沈んだ気持ちをゆっくりほどきたい夜"
+    elif any(word in mood for word in ["緊張", "不安", "発表", "プレッシャー"]):
+        emotion = "胸の奥が少し張りつめている状態"
+    elif any(word in mood for word in ["頑張", "前向き", "やる気", "挑戦"]):
+        emotion = "もう一歩踏み出したい前向きさ"
+    else:
+        emotion = "今の気持ちにそっと名前をつけたい時間"
+
+    return emotion, labels
+
+
+def build_demo_recommendation(mood: str) -> dict:
+    """Anthropic API を使わず、ローカルデータだけで推薦を作る。"""
+    emotion, labels = local_classify(mood)
+    candidates = select_candidates(labels)
+    songs = [
+        {
+            "title": song["title"],
+            "reason": f'{song["description"]} 今の「{mood}」という気分に対して、{", ".join(song["mood"][:3])} の要素が自然に重なります。',
+            "source_url": song.get("source_url", ""),
+            "release_title": song.get("release_title", ""),
+            "release_date": song.get("release_date", ""),
+        }
+        for song in candidates
+    ]
+    return {
+        "emotion": emotion,
+        "songs": songs,
+        "message": "デモモードでは Claude API を使わず、ローカル曲DBと簡易ラベル判定だけで推薦しています。",
+    }
+
+
+def get_response_text(response) -> str:
+    """Anthropic SDK のレスポンスからテキストだけを取り出す。"""
+    parts = []
+    for block in getattr(response, "content", []):
+        text = getattr(block, "text", "")
+        if text:
+            parts.append(text)
+    return "\n".join(parts)
+
+
 # ─────────────────────────────────────────
 # LLM プロンプト定義
 # ─────────────────────────────────────────
 
 # Step1: 気分を感情ラベルに分類する
-CLASSIFY_SYSTEM = """ユーザーの「今の気分」を読み取り、以下の形式だけで出力してください。
+CLASSIFY_SYSTEM = f"""ユーザーの「今の気分」を読み取り、以下の形式だけで出力してください。
 
 感情表現: 〇〇（詩的に短く。例：「静かに溶けていくような切なさ」）
 ラベル: ラベル1, ラベル2, ...
 
 ラベルは以下のリストから当てはまるものを選んでください（複数可）:
-癒し, 恋愛, 安心, 切ない, 愛, 感謝, 家族, 温かい, 悲しい, 喪失, 泣きたい, 希望, 前向き, 応援, 立ち直り, 元気, 明るい, 勇気, 自信, 力強い, 夜, 寂しい, 壮大, 人生, 思い出, 静か, 祈り, 悲しみ, 深い, ソウルフル, 高揚感, 大人, ジャズ"""
+{", ".join(ALL_LABELS)}"""
 
 # Step2: 選ばれた候補曲だけを渡して推薦文を書かせる
 RECOMMEND_SYSTEM = """あなたは MISIA の音楽に深く精通した、感性豊かな音楽コンシェルジュです。
@@ -389,6 +480,8 @@ def parse_recommend(raw: str, emotion: str) -> dict:
                     song["title"] = sl.replace("曲名:", "").strip().lstrip("【「").rstrip("】」")
                 elif sl.startswith("理由:"):
                     song["reason"] = sl.replace("理由:", "").strip()
+                elif song["reason"]:
+                    song["reason"] = f'{song["reason"]} {sl}'
                 i += 1
             # SONG_DATABASE に存在する曲名のみ採用
             if song["title"] in VALID_TITLES:
@@ -406,12 +499,13 @@ def parse_recommend(raw: str, emotion: str) -> dict:
 def render_recommendation(mood: str, parsed: dict) -> str:
     """解析済みデータを HTML カード文字列に変換する"""
     html_parts = []
+    safe_mood = html.escape(mood)
 
     # ユーザー入力バブル
     html_parts.append(
         f'<div class="user-bubble">'
         f'<div class="user-label">💬 あなたの気分</div>'
-        f'{mood}'
+        f'{safe_mood}'
         f'</div>'
     )
 
@@ -420,29 +514,79 @@ def render_recommendation(mood: str, parsed: dict) -> str:
 
     # 感情タグ
     if parsed["emotion"]:
+        safe_emotion = html.escape(parsed["emotion"])
         html_parts.append(
-            f'<div class="emotion-tag">🔮 {parsed["emotion"]}</div>'
+            f'<div class="emotion-tag">🔮 {safe_emotion}</div>'
         )
 
     # 楽曲カード
     for song in parsed["songs"]:
+        metadata = SONGS_BY_TITLE.get(song["title"], {})
+        source_url = song.get("source_url") or metadata.get("source_url", "")
+        release_title = song.get("release_title") or metadata.get("release_title", "")
+        release_date = song.get("release_date") or metadata.get("release_date", "")
+        safe_title = html.escape(song["title"])
+        safe_reason = html.escape(song["reason"])
+        safe_source_url = html.escape(source_url, quote=True)
+        release_bits = [bit for bit in [release_date, release_title] if bit]
+        safe_release = html.escape(" / ".join(release_bits))
+        meta_html = ""
+        if source_url or release_bits:
+            link_html = ""
+            if source_url:
+                link_html = (
+                    f'<a class="song-link" href="{safe_source_url}" '
+                    f'target="_blank" rel="noopener noreferrer">公式ページ</a>'
+                )
+            meta_html = f'<div class="song-meta">{safe_release} {link_html}</div>'
         html_parts.append(
             f'<div class="song-card">'
-            f'<div class="song-title">🎵 {song["title"]}</div>'
-            f'<div class="song-reason">{song["reason"]}</div>'
+            f'<div class="song-title">🎵 {safe_title}</div>'
+            f'<div class="song-reason">{safe_reason}</div>'
+            f'{meta_html}'
             f'</div>'
         )
 
     # 一言メッセージ
     if parsed["message"]:
+        safe_message = html.escape(parsed["message"])
         html_parts.append(
-            f'<div class="closing-message">✨ {parsed["message"]}</div>'
+            f'<div class="closing-message">✨ {safe_message}</div>'
         )
 
     html_parts.append("</div>")  # rec-container 閉じ
     html_parts.append('<hr class="divider">')
 
     return "\n".join(html_parts)
+
+
+def generate_with_claude(mood_input: str, client) -> dict:
+    """Claude API で感情分類と推薦文生成を行う。"""
+    r1 = client.messages.create(
+        model=MODEL_NAME,
+        max_tokens=200,
+        system=CLASSIFY_SYSTEM,
+        messages=[{"role": "user", "content": f"今の気分: {mood_input}"}],
+    )
+    emotion, labels = parse_classify(get_response_text(r1))
+
+    candidates = select_candidates(labels)
+    r2 = client.messages.create(
+        model=MODEL_NAME,
+        max_tokens=800,
+        system=RECOMMEND_SYSTEM,
+        messages=[{"role": "user", "content": build_recommend_prompt(mood_input, candidates)}],
+    )
+    parsed = parse_recommend(get_response_text(r2), emotion)
+
+    if not parsed["songs"]:
+        parsed["songs"] = [
+            {"title": candidate["title"], "reason": candidate["description"]}
+            for candidate in candidates
+        ]
+        parsed["message"] = "あなたの気分に合う曲を選びました。"
+
+    return parsed
 
 
 # ─────────────────────────────────────────
@@ -454,10 +598,10 @@ for entry in st.session_state.history:
 # ─────────────────────────────────────────
 # API Key 未入力時の案内 / 入力済みの場合は推薦処理
 # ─────────────────────────────────────────
-if not api_key:
+if not api_key and not demo_mode:
     st.info("左のサイドバーに Anthropic API Key を入力すると、楽曲推薦を開始できます。")
 else:
-    client = anthropic.Anthropic(api_key=api_key)
+    client = None if demo_mode else anthropic.Anthropic(api_key=api_key)
 
     # ─────────────────────────────────────────
     # チャット入力
@@ -469,38 +613,18 @@ else:
     # ─────────────────────────────────────────
     # 入力があったら推薦処理を実行
     # ─────────────────────────────────────────
-    if mood_input:
-        mood_input = mood_input.strip()
+    selected_mood = example_mood or mood_input
+    if selected_mood:
+        mood_input = selected_mood.strip()
         if not mood_input:
             st.warning("気分を入力してください。")
         else:
             with st.spinner("🎵 MISIA の楽曲を探しています…"):
                 try:
-                    # Step1: 気分 → 感情ラベルに分類
-                    r1 = client.messages.create(
-                        model="claude-haiku-4-5-20251001",
-                        max_tokens=200,
-                        system=CLASSIFY_SYSTEM,
-                        messages=[{"role": "user", "content": f"今の気分: {mood_input}"}],
-                    )
-                    emotion, labels = parse_classify(r1.content[0].text or "")
-
-                    # Step2: ラベルで候補曲を絞り込み → 推薦文を生成
-                    candidates = select_candidates(labels)
-                    r2 = client.messages.create(
-                        model="claude-haiku-4-5-20251001",
-                        max_tokens=800,
-                        system=RECOMMEND_SYSTEM,
-                        messages=[{"role": "user", "content": build_recommend_prompt(mood_input, candidates)}],
-                    )
-                    parsed = parse_recommend(r2.content[0].text or "", emotion)
-
-                    # バリデーション後に曲が残らない場合のフォールバック
-                    if not parsed["songs"]:
-                        parsed["songs"] = [
-                            {"title": c["title"], "reason": c["description"]} for c in candidates
-                        ]
-                        parsed["message"] = "あなたの気分に合う曲を選びました。"
+                    if demo_mode:
+                        parsed = build_demo_recommendation(mood_input)
+                    else:
+                        parsed = generate_with_claude(mood_input, client)
 
                     # HTML に変換して履歴に追加
                     html = render_recommendation(mood_input, parsed)
@@ -509,12 +633,12 @@ else:
                     # 画面に表示
                     st.markdown(html, unsafe_allow_html=True)
 
-                except anthropic.AuthenticationError:
+                except ANTHROPIC_AUTHENTICATION_ERROR:
                     st.markdown(
                         '<div class="error-box">🔑 API キーが無効です。正しい Anthropic API Key をサイドバーに入力してください。</div>',
                         unsafe_allow_html=True,
                     )
-                except anthropic.APIError as e:
+                except ANTHROPIC_API_ERROR as e:
                     st.markdown(
                         f'<div class="error-box">⚠️ API エラーが発生しました：{e}</div>',
                         unsafe_allow_html=True,
