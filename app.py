@@ -153,6 +153,37 @@ st.markdown(
     margin-bottom: 1.2rem;
 }
 
+.examples-label {
+    color: #dbeafe;
+    font-size: 0.92rem;
+    font-weight: 700;
+    margin: 0.4rem 0 0.6rem;
+}
+
+div[data-testid="stHorizontalBlock"] .stButton > button {
+    background: rgba(15, 23, 42, 0.86) !important;
+    border: 1px solid rgba(125, 211, 252, 0.48) !important;
+    border-radius: 8px !important;
+    color: #f8fafc !important;
+    min-height: 3rem;
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
+}
+
+div[data-testid="stHorizontalBlock"] .stButton > button p {
+    color: #f8fafc !important;
+    font-size: 1rem !important;
+    font-weight: 700 !important;
+}
+
+div[data-testid="stHorizontalBlock"] .stButton > button:hover {
+    background: rgba(30, 41, 59, 0.98) !important;
+    border-color: rgba(253, 230, 138, 0.75) !important;
+}
+
+div[data-testid="stHorizontalBlock"] .stButton > button:hover p {
+    color: #fde68a !important;
+}
+
 /* ===== 楽曲カード ===== */
 .song-card {
     background: linear-gradient(135deg, rgba(15, 23, 42, 0.88), rgba(29, 78, 116, 0.40));
@@ -225,6 +256,17 @@ st.markdown(
     border: 1px solid rgba(45, 212, 191, 0.35) !important;
     color: #eff6ff !important;
     border-radius: 8px !important;
+    caret-color: #fde68a !important;
+}
+
+.stChatInput textarea::placeholder {
+    color: #dbeafe !important;
+    opacity: 0.9 !important;
+}
+
+.stChatInput textarea:focus {
+    border-color: rgba(125, 211, 252, 0.78) !important;
+    box-shadow: 0 0 0 2px rgba(125, 211, 252, 0.16) !important;
 }
 
 /* ===== スピナー文字色 ===== */
@@ -315,7 +357,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-st.caption("入力例")
+st.markdown('<div class="examples-label">入力例</div>', unsafe_allow_html=True)
 example_cols = st.columns(len(EXAMPLE_MOODS))
 example_mood = None
 for col, mood_text in zip(example_cols, EXAMPLE_MOODS):
